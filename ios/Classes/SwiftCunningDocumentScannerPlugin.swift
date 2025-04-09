@@ -8,6 +8,7 @@ public class SwiftCunningDocumentScannerPlugin: NSObject, FlutterPlugin, VNDocum
   var resultChannel: FlutterResult?
   var presentingController: VNDocumentCameraViewController?
   var scannerOptions: CunningScannerOptions = CunningScannerOptions()
+  var noOfPages: Int = 100  // <-- added
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "cunning_document_scanner", binaryMessenger: registrar.messenger())
@@ -18,6 +19,13 @@ public class SwiftCunningDocumentScannerPlugin: NSObject, FlutterPlugin, VNDocum
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     if call.method == "getPictures" {
             scannerOptions = CunningScannerOptions.fromArguments(args: call.arguments)
+            
+            // 👇 extract noOfPages if provided
+            if let args = call.arguments as? [String: Any],
+            let pages = args["noOfPages"] as? Int {
+                self.noOfPages = pages
+            }
+
             let presentedVC: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
             self.resultChannel = result
             if VNDocumentCameraViewController.isSupported {
@@ -31,8 +39,7 @@ public class SwiftCunningDocumentScannerPlugin: NSObject, FlutterPlugin, VNDocum
             result(FlutterMethodNotImplemented)
             return
         }
-  }
-
+    }
 
     func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -47,7 +54,10 @@ public class SwiftCunningDocumentScannerPlugin: NSObject, FlutterPlugin, VNDocum
         df.dateFormat = "yyyyMMdd-HHmmss"
         let formattedDate = df.string(from: currentDateTime)
         var filenames: [String] = []
-        for i in 0 ..< scan.pageCount {
+
+        // 👇 Limit pages based on noOfPages
+        let pageLimit = min(scan.pageCount, noOfPages)
+        for i in 0 ..< pageLimit {
             let page = scan.imageOfPage(at: i)
             let url = tempDirPath.appendingPathComponent(formattedDate + "-\(i).\(scannerOptions.imageFormat.rawValue)")
             switch scannerOptions.imageFormat {
@@ -61,6 +71,7 @@ public class SwiftCunningDocumentScannerPlugin: NSObject, FlutterPlugin, VNDocum
             
             filenames.append(url.path)
         }
+
         resultChannel?(filenames)
         presentingController?.dismiss(animated: true)
     }
